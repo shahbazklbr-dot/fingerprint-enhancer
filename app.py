@@ -4,33 +4,32 @@ import cv2
 import numpy as np
 import os
 from werkzeug.utils import secure_filename
-import zipfile
-from io import BytesIO
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = '/tmp'
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1000 * 1000  # 16MB max
+os.makedirs('/tmp', exist_ok=True)
 
 HTML = '''
 <!DOCTYPE html>
 <html>
-<head>
-    <title>5 Fingerprint Cleaner</title>
-    <style>
-        body {font-family: Arial; text-align:center; margin:50px; background:#f4f4f4;}
-        h1 {color:#333;}
-        input, button {padding:15px; font-size:18px; margin:10px; border-radius:8px;}
-        button {background:#007bff; color:white; border:none; cursor:pointer;}
-    </style>
+<head><title>Fingerprint Cleaner</title>
+<style>
+body{font-family:Arial;text-align:center;margin:50px;background:#f0f0f0;}
+h1{color:#333;}
+input,button{padding:15px 30px;font-size:18px;margin:10px;border-radius:8px;}
+button{background:#0066ff;color:white;border:none;cursor:pointer;}
+img{max-width:90%;margin:20px;border:2px solid #333;border-radius:10px;}
+</style>
 </head>
 <body>
-    <h1>Ek Saath 5 Fingerprint Upload Karo</h1>
-    <p>5 tak images select karo → sab clean black-on-white ban jayengi</p>
-    <form method="post" enctype="multipart/form-data">
-        <input type="file" name="files" accept="image/*" multiple required>
-        <br><br>
-        <button type="submit">Enhance Karo!</button>
-    </form>
+<h1>Fingerprint Enhancer (Free & Fast)</h1>
+<p>1 fingerprint upload karo → clean black ridges + white background milega</p>
+<form method=post enctype=multipart/form-data>
+<input type=file name=file accept="image/*" required>
+<br><br>
+<button type=submit>Enhance Karo!</button>
+</form>
 </body>
 </html>
 '''
@@ -38,63 +37,43 @@ HTML = '''
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
-        files = request.files.getlist('files')
-        if len(files) == 0 or len(files) > 5:
-            return "<h3>1 se 5 images select karo!</h3><a href='/'>Wapas</a>"
+        file = request.files['file']
+        if not file or file.filename == '':
+            return "<h3>File nahi chuna!</h3><a href='/'>Wapas</a>"
 
-        output_paths = []
-        result_html = "<h2>Processing... 20-30 sec lagega</h2><div style='display:flex;flex-wrap:wrap;justify-content:center;'>"
+        filename = secure_filename(file.filename)
+        input_path = os.path.join('/tmp', filename)
+        file.save(input_path)
 
-        for i, file in enumerate(files):
-            if not file or file.filename == '':
-                continue
-            filename = secure_filename(file.filename)
-            input_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            file.save(input_path)
-
+        try:
             img = cv2.imread(input_path, 0)
+            if img is None:
+                return "<h3>Invalid image!</h3><a href='/'>Wapas</a>"
+
             enhanced = enhance_fingerprint(img)
             final = (enhanced.astype(np.uint8) * 255)
             final = 255 - final  # white background + black ridges
 
-            clean_name = f"CLEAN_{i+1}_{filename}"
-            output_path = os.path.join(app.config['UPLOAD_FOLDER'], clean_name)
+            output_path = '/tmp/CLEAN_' + filename
             cv2.imwrite(output_path, final)
-            output_paths.append((output_path, clean_name))
 
-            result_html += f'''
-            <div style="margin:20px;">
-                <p><b>{filename}</b></p>
-                <img src="/download/{clean_name}" width="350"><br>
-                <a href="/download/{clean_name}" download><button>Download</button></a>
-            </div>
+            return f'''
+            <h2>Ho Gaya Bhai! 🔥</h2>
+            <img src="/result/{filename}"><br><br>
+            <a href="/result/{filename}" download>
+                <button style="padding:20px 50px;font-size:22px;">Download Clean Fingerprint</button>
+            </a>
+            <hr><a href="/">Ek aur karo</a>
             '''
-
-        result_html += "</div><br><br>"
-
-        # ZIP banao
-        zip_path = os.path.join(app.config['UPLOAD_FOLDER'], "ALL_5_CLEAN_FINGERPRINTS.zip")
-        with zipfile.ZipFile(zip_path, 'w') as zf:
-            for path, name in output_paths:
-                zf.write(path, name)
-
-        result_html += f'''
-        <a href="/download/ALL_5_CLEAN_FINGERPRINTS.zip">
-            <button style="padding:20px 50px; font-size:24px; background:green;">
-                Download Sab 5 Ek Saath (ZIP)
-            </button>
-        </a>
-        <hr><a href="/">Ek aur batch</a>
-        '''
-
-        return result_html
+        except Exception as e:
+            return f"<h3>Error: {str(e)}</h3><a href='/'>Wapas</a>"
 
     return HTML
 
-@app.route('/download/<filename>')
-def download(filename):
-    file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    return send_file(file_path, as_attachment=True)
+@app.route('/result/<filename>')
+def result(filename):
+    path = '/tmp/CLEAN_' + filename
+    return send_file(path, as_attachment=False)
 
 if __name__ == '__main__':
-    app.run()
+    app.run(host='0.0.0.0', port=8080)
