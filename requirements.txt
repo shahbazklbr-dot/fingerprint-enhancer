@@ -1,6 +1,5 @@
 fingerprint_enhancer
 opencv-python-headless
 flask
-gunicorn
 numpy
-pillow
+gunicorn
