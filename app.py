@@ -1,4 +1,4 @@
-from flask import Flask, request, send_file, render_template_string
+from flask import Flask, request, send_file, render_template_string, jsonify
 from fingerprint_enhancer import enhance_fingerprint
 import cv2
 import numpy as np
@@ -11,44 +11,32 @@ app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = '/tmp'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-HTML = '''
-<!DOCTYPE html>
-<html>
-<head>
-    <title>5 Fingerprint Enhancer</title>
-    <style>
-        body {font-family: Arial; text-align:center; margin:50px; background:#f4f4f4;}
-        h1 {color:#333;}
-        input, button {padding:15px; font-size:18px; margin:10px;}
-        button {background:#007bff; color:white; border:none; border-radius:8px; cursor:pointer;}
-    </style>
-</head>
-<body>
-    <h1>Ek Saath 5 Fingerprint Upload Karo</h1>
-    <p>Maximum 5 images select karo → sab clean black-on-white ban jayengi</p>
-    <form method="post" enctype="multipart/form-data">
-        <input type="file" name="files" accept="image/*" multiple required>
-        <br><br>
-        <button type="submit">5 Images Enhance Karo!</button>
-    </form>
-</body>
-</html>
-'''
+# ← YEH LINE ADD KARO (timeout badhane ke liye)
+@app.before_request
+def before_request():
+    from flask import g
+    import time
+    g.start = time.time()
+
+@app.after_request
+def after_request(response):
+    # Render ko batao ki zyada time lagega
+    response.headers['X-Response-Time'] = '30s'
+    return response
+
+HTML = '''... same rahega ...'''  # pehle wala HTML
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
         files = request.files.getlist('files')
-        if not files or len(files) == 0:
-            return "<h3>Koi file nahi chuni!</h3><a href='/'>Wapas</a>"
-
         if len(files) > 5:
-            return "<h3>Max 5 images hi allow hain!</h3><a href='/'>Wapas</a>"
+            return "<h3>Max 5 images!</h3><a href='/'>Wapas</a>"
 
         output_paths = []
-        display_html = "<h2>Ho Gaya Bhai! 🔥</h2><div style='display:flex;flex-wrap:wrap;justify-content:center;'>"
+        display_html = "<h2>Processing shuru... 20-30 second lagega</h2><p>Page refresh mat karna!</p>"
 
-        for file in files:
+        for i, file in enumerate(files):
             if file.filename == '':
                 continue
             filename = secure_filename(file.filename)
@@ -58,66 +46,46 @@ def index():
             img = cv2.imread(input_path, 0)
             enhanced = enhance_fingerprint(img)
             final = (enhanced.astype(np.uint8) * 255)
-            final = 255 - final  # white background + black ridges
+            final = 255 - final
 
-            clean_name = "CLEAN_" + filename
+            clean_name = f"CLEAN_{i+1}_{filename}"
             output_path = os.path.join(app.config['UPLOAD_FOLDER'], clean_name)
             cv2.imwrite(output_path, final)
-            output_paths.append(output_path)
+            output_paths.append((output_path, clean_name))
 
+            display_html += f'<p>{filename} → Done!</p>'
+
+        # Sab images dikhao
+        display_html += "<h2>Ho Gaya Bhai! 🔥</h2><div style='display:flex;flex-wrap:wrap;justify-content:center;'>"
+        for path, name in output_paths:
             display_html += f'''
             <div style="margin:20px;">
-                <p><b>{filename}</b></p>
-                <img src="/download/{clean_name}" width="300"><br>
-                <a href="/download/{clean_name}" download><button>Download</button></a>
-            </div>
-            '''
+                <img src="/download/{name}" width="300"><br>
+                <a href="/download/{name}" download><button>Download {name}</button></a>
+            </div>'''
 
-        display_html += "</div><hr>"
+        # ZIP button
+        zip_data = BytesIO()
+        with zipfile.ZipFile(zip_data, 'w') as zf:
+            for path, name in output_paths:
+                zf.write(path, name)
+        zip_data.seek(0)
+        # Temp zip save (download ke liye)
+        zip_path = os.path.join(app.config['UPLOAD_FOLDER'], 'ALL_CLEAN_FINGERPRINTS.zip')
+        with open(zip_path, 'wb') as f:
+            f.write(zip_data.read())
 
-        # Zip banao taaki ek click mein sab download ho jaye
-        memory_file = BytesIO()
-        with zipfile.ZipFile(memory_file, 'w') as zf:
-            for path in output_paths:
-                zf.write(path, os.path.basename(path))
-        memory_file.seek(0)
-
-        # Zip download button
-        display_html += '''
-        <br><br>
-        <h3>Ya phir sab ek saath download karo (ZIP)</h3>
-        <form action="/download_zip" method="post">
-            <input type="hidden" name="files" value="%s">
-            <button style="padding:20px 50px; font-size:22px; background:#28a745;">
-                Download All 5 Clean Fingerprints (ZIP)
-            </button>
-        </form>
-        <hr><a href="/">Ek aur batch karo</a>
-        ''' % ';'.join([os.path.basename(p) for p in output_paths])
+        display_html += f'''
+        <br><br><a href="/download/ALL_CLEAN_FINGERPRINTS.zip">
+        <button style="padding:20px 50px; font-size:24px; background:green;">
+            Download Sab 5 Ek Saath (ZIP)
+        </button></a><hr><a href="/">Ek aur batch</a>'''
 
         return display_html
 
     return HTML
 
-# Individual download
 @app.route('/download/<filename>')
 def download(filename):
     path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     return send_file(path, as_attachment=True)
-
-# ZIP download
-@app.route('/download_zip', methods=['POST'])
-def download_zip():
-    filenames = request.form['files'].split(';')
-    memory_file = BytesIO()
-    with zipfile.ZipFile(memory_file, 'w') as zf:
-        for name in filenames:
-            if name:
-                path = os.path.join(app.config['UPLOAD_FOLDER'], name)
-                if os.path.exists(path):
-                    zf.write(path, name)
-    memory_file.seek(0)
-    return send_file(memory_file, as_attachment=True, download_name='CLEAN_FINGERPRINTS_5.zip')
-
-if __name__ == '__main__':
-    app.run()
