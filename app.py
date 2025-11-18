@@ -55,19 +55,34 @@ def index():
             file.save(input_path)
 
             img = cv2.imread(input_path, 0)
-
             if img is None:
                 continue
 
+            # FREE PLAN SAFE RESIZE (super important)
+            max_dim = 800
+            h, w = img.shape
+
+            if max(h, w) > max_dim:
+                scale = max_dim / max(h, w)
+                img = cv2.resize(img, (int(w * scale), int(h * scale)))
+
+            # Enhance
             enhanced = enhance_fingerprint(img)
             final = (enhanced.astype(np.uint8) * 255)
             final = 255 - final  # white bg + black ridges
 
+            # Save
             output_path = '/tmp/CLEAN_' + filename
             cv2.imwrite(output_path, final)
             output_files.append(output_path)
 
-        # ZIP file create karein
+            # MEMORY CLEANUP (free plan essential)
+            del img
+            del enhanced
+            del final
+            cv2.destroyAllWindows()
+
+        # ZIP all files
         zip_name = f"/tmp/cleaned_{int(time.time())}.zip"
         with zipfile.ZipFile(zip_name, 'w') as zipf:
             for fpath in output_files:
