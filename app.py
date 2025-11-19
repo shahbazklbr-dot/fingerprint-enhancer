@@ -24,7 +24,7 @@ img{max-width:90%;margin:20px;border:2px solid #333;border-radius:10px;}
 </style>
 </head>
 <body>
-<h1>Fingerprint Enhancer (Free & Fast)</h1>
+<h1>Fingerprint Enhancer</h1>
 <p>Upload 5 fingerprints at once — you’ll get all of them clean instantly!</p>
 <form method=post enctype=multipart/form-data>
 <input type=file name=files accept="image/*" multiple required>
