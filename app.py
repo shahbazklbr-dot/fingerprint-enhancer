@@ -260,7 +260,7 @@ SUCCESS_PAGE = '''
 <div class="box">
     <h2>All fingerprints have been cleaned! 🔥</h2>
     <a href="{DOWNLOAD_LINK}" download class="download-btn">Download ALL (ZIP)</a>
-    <a href="/">⟵ Back to Home</a>
+    <a href="/">⟵ Back</a>
 </div>
 
 </body>
