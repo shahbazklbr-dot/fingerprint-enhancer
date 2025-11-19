@@ -25,11 +25,11 @@ img{max-width:90%;margin:20px;border:2px solid #333;border-radius:10px;}
 </head>
 <body>
 <h1>Fingerprint Enhancer (Free & Fast)</h1>
-<p>Ek baar me 5 fingerprints upload karo → sab clean mil jayenge!</p>
+<p>Upload 5 fingerprints at once — you’ll get all of them clean instantly!</p>
 <form method=post enctype=multipart/form-data>
 <input type=file name=files accept="image/*" multiple required>
 <br><br>
-<button type=submit>Enhance Karo!</button>
+<button type=submit>Enhance!</button>
 </form>
 </body>
 </html>
@@ -42,10 +42,10 @@ def index():
         files = request.files.getlist("files")
 
         if not files or len(files) == 0:
-            return "<h3>Koi file nahi chuni!</h3><a href='/'>Wapas</a>"
+            return "<h3>No file selected!</h3><a href='/'>Return</a>"
 
         if len(files) > 5:
-            return "<h3>Maximum 5 fingerprints upload kar sakte ho.</h3><a href='/'>Wapas</a>"
+            return "<h3>You can upload a maximum of 5 fingerprints.</h3><a href='/'>Return</a>"
 
         output_files = []
 
@@ -89,11 +89,11 @@ def index():
                 zipf.write(fpath, os.path.basename(fpath))
 
         return f'''
-        <h2>Saare Fingerprints Clean Ho Gaye! 🔥</h2>
+        <h2>All fingerprints have been cleaned! 🔥</h2>
         <a href="/download/{os.path.basename(zip_name)}" download>
             <button style="padding:20px 50px;font-size:22px;">Download ALL (ZIP)</button>
         </a>
-        <hr><a href="/">Wapas</a>
+        <hr><a href="/">Return</a>
         '''
 
     return HTML
