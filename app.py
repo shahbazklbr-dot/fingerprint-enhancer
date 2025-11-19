@@ -24,45 +24,45 @@ HTML = '''
         margin:0;
         padding:0;
         font-family: 'Segoe UI', sans-serif;
-        background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+        background:#f5f7fa;
         display:flex;
         justify-content:center;
         align-items:center;
         min-height:100vh;
-        color:#fff;
+        color:#333;
     }
 
     .container{
         width:90%;
         max-width:520px;
-        padding:30px;
-        background: rgba(255,255,255,0.08);
-        backdrop-filter: blur(15px);
+        padding:35px;
+        background:white;
         border-radius:20px;
         text-align:center;
-        box-shadow:0 10px 25px rgba(0,0,0,0.3);
+        box-shadow:0 8px 20px rgba(0,0,0,0.12);
         animation: fadeIn 0.6s ease-in-out;
     }
 
     h1{
-        font-size:32px;
+        font-size:30px;
         margin-bottom:10px;
         font-weight:700;
+        color:#222;
     }
 
     p{
         font-size:16px;
         margin-bottom:25px;
-        opacity:0.9;
+        opacity:0.8;
     }
 
     input[type=file]{
-        background:#ffffff25;
-        padding:12px;
+        background:#eef2f5;
+        padding:14px;
         border-radius:10px;
         width:100%;
-        color:#eee;
-        border:1px solid #ffffff40;
+        border:1px solid #d0d7de;
+        color:#444;
     }
 
     button{
@@ -71,7 +71,7 @@ HTML = '''
         font-size:20px;
         border:none;
         border-radius:12px;
-        background:#0d6efd;
+        background:#007bff;
         color:white;
         cursor:pointer;
         transition:0.25s;
@@ -79,12 +79,12 @@ HTML = '''
     }
 
     button:hover{
-        background:#0a58ca;
+        background:#0056d8;
         transform:translateY(-3px);
-        box-shadow:0 8px 18px rgba(0,0,0,0.3);
+        box-shadow:0 6px 14px rgba(0,0,0,0.2);
     }
 
-    /* Loader Background */
+    /* Loader */
     #loader-area{
         display:none;
         position:fixed;
@@ -92,21 +92,20 @@ HTML = '''
         left:0;
         right:0;
         bottom:0;
-        background:rgba(0,0,0,0.7);
-        backdrop-filter: blur(6px);
+        background:rgba(255,255,255,0.8);
+        backdrop-filter: blur(4px);
         justify-content:center;
         align-items:center;
         flex-direction:column;
         z-index:999;
     }
 
-    /* Loader Animation */
     .spinner{
-        width:70px;
-        height:70px;
+        width:60px;
+        height:60px;
         border-radius:50%;
-        border:6px solid rgba(255,255,255,0.2);
-        border-top-color:#fff;
+        border:6px solid rgba(0,0,0,0.1);
+        border-top-color:#007bff;
         animation: spin 1s linear infinite;
         margin-bottom:20px;
     }
@@ -116,29 +115,28 @@ HTML = '''
         100%{transform:rotate(360deg);}
     }
 
-    /* Progress Bar */
     .progress-box{
         width:80%;
         height:12px;
-        background:rgba(255,255,255,0.2);
+        background:#e3e7eb;
         border-radius:8px;
         overflow:hidden;
     }
     .progress-bar{
         width:0%;
         height:100%;
-        background:#00ffea;
+        background:#00c2ff;
         transition:0.3s;
     }
 
     #loader-text{
         margin-top:15px;
-        font-size:18px;
-        letter-spacing:1px;
+        font-size:17px;
+        color:#444;
     }
 
     @keyframes fadeIn{
-        from{opacity:0; transform:translateY(15px);}
+        from{opacity:0; transform:translateY(12px);}
         to{opacity:1; transform:translateY(0);}
     }
 
@@ -157,13 +155,12 @@ HTML = '''
     </form>
 </div>
 
-<!-- Loader Overlay -->
 <div id="loader-area">
     <div class="spinner"></div>
     <div class="progress-box">
         <div class="progress-bar" id="progress"></div>
     </div>
-    <div id="loader-text">Processing...</div>
+    <div id="loader-text">Processing fingerprints...</div>
 </div>
 
 <script>
@@ -183,6 +180,88 @@ HTML = '''
         }, 100);
     });
 </script>
+
+</body>
+</html>
+'''
+
+SUCCESS_PAGE = '''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Done</title>
+
+<style>
+    body{
+        margin:0;
+        padding:0;
+        background:#f5f7fa;
+        font-family: 'Segoe UI', sans-serif;
+        display:flex;
+        justify-content:center;
+        align-items:center;
+        min-height:100vh;
+    }
+
+    .box{
+        background:white;
+        padding:40px;
+        border-radius:20px;
+        text-align:center;
+        box-shadow:0 8px 20px rgba(0,0,0,0.12);
+        width:90%;
+        max-width:450px;
+        animation: fadeIn 0.5s ease-in-out;
+    }
+
+    h2{
+        font-size:28px;
+        color:#222;
+        margin-bottom:10px;
+    }
+
+    .download-btn{
+        margin-top:20px;
+        padding:18px 40px;
+        background:#28a745;
+        color:white;
+        font-size:20px;
+        border:none;
+        border-radius:12px;
+        cursor:pointer;
+        text-decoration:none;
+        display:inline-block;
+        transition:0.2s;
+    }
+
+    .download-btn:hover{
+        background:#1e8a39;
+        transform:translateY(-3px);
+    }
+
+    a{
+        color:#007bff;
+        margin-top:15px;
+        display:block;
+        font-size:18px;
+    }
+
+    @keyframes fadeIn{
+        from{opacity:0; transform:translateY(12px);}
+        to{opacity:1; transform:translateY(0);}
+    }
+</style>
+
+</head>
+<body>
+
+<div class="box">
+    <h2>All fingerprints have been cleaned! 🔥</h2>
+    <a href="{DOWNLOAD_LINK}" download class="download-btn">Download ALL (ZIP)</a>
+    <a href="/">⟵ Back to Home</a>
+</div>
 
 </body>
 </html>
@@ -211,7 +290,6 @@ def index():
             if img is None:
                 continue
 
-            # FREE PLAN SAFE RESIZE
             max_dim = 800
             h, w = img.shape
 
@@ -219,35 +297,23 @@ def index():
                 scale = max_dim / max(h, w)
                 img = cv2.resize(img, (int(w * scale), int(h * scale)))
 
-            # Enhance
             enhanced = enhance_fingerprint(img)
             final = (enhanced.astype(np.uint8) * 255)
-            final = 255 - final  # white bg + black ridges
+            final = 255 - final
 
-            # Save
             output_path = '/tmp/CLEAN_' + filename
             cv2.imwrite(output_path, final)
             output_files.append(output_path)
 
-            # MEMORY CLEANUP
-            del img
-            del enhanced
-            del final
+            del img, enhanced, final
             cv2.destroyAllWindows()
 
-        # ZIP all files
         zip_name = f"/tmp/cleaned_{int(time.time())}.zip"
         with zipfile.ZipFile(zip_name, 'w') as zipf:
             for fpath in output_files:
                 zipf.write(fpath, os.path.basename(fpath))
 
-        return f'''
-        <h2>All fingerprints have been cleaned! 🔥</h2>
-        <a href="/download/{os.path.basename(zip_name)}" download>
-            <button style="padding:20px 50px;font-size:22px;">Download ALL (ZIP)</button>
-        </a>
-        <hr><a href="/">Return</a>
-        '''
+        return SUCCESS_PAGE.replace("{DOWNLOAD_LINK}", f"/download/{os.path.basename(zip_name)}")
 
     return HTML
 
