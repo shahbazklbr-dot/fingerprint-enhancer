@@ -145,6 +145,8 @@ p{margin:10px 0 0;font-size:16px;color:rgba(255,255,255,0.92)}
     <svg viewBox="0 0 24 24"><path d="M9 16.17l-3.88-3.88a1 1 0 0 0-1.41 1.41l4.59 4.59a1 1 0 0 0 1.41 0l10-10a1 1 0 1 0-1.41-1.41L9 16.17z"/></svg>
   </div>
   <h1>Enhancement Complete</h1>
+  <p>Your cleaned fingerprints are ready.</p>
+  <div class="small">You will be redirected to your dashboard in a few seconds.</div>
 </div>
 
 <script>
