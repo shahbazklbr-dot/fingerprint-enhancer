@@ -97,7 +97,7 @@ input[type=file]{
     </div>
 
     <div class="actions">
-      <button type="submit" class="btn">Enhance (₹10)</button>
+      <button type="submit" class="btn">Enhance</button>
     </div>
   </form>
 
