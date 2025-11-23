@@ -1,0 +1,11 @@
+
+flask
+flask_sqlalchemy
+flask_migrate
+psycopg2-binary
+werkzeug
+gunicorn
+opencv-python-headless
+numpy
+pillow
+python-dotenv
