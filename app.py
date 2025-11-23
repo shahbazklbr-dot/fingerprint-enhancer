@@ -1,163 +1,328 @@
-from flask import Flask, request, send_file, abort
+from flask import Flask, request, send_file
 from fingerprint_enhancer import enhance_fingerprint
 import cv2
 import numpy as np
 import os
+from werkzeug.utils import secure_filename
 import zipfile
 import time
-import threading
-from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = '/tmp/fp_uploads'
-app.config['MAX_CONTENT_LENGTH'] = 25 * 1024 * 1024  # 25 MB
+app.config['UPLOAD_FOLDER'] = '/tmp'
+os.makedirs('/tmp', exist_ok=True)
 
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-
-# ==================== HTML UI ====================
 HTML = '''
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Grey Ridge Fingerprint Cleaner</title>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fingerprint Cleaner</title>
+
 <style>
-    body{margin:0;padding:0;font-family:'Segoe UI',sans-serif;background:linear-gradient(135deg,#667eea,#764ba2);display:flex;justify-content:center;align-items:center;min-height:100vh;color:#333;}
-    .box{max-width:520px;width:90%;padding:40px;background:white;border-radius:20px;box-shadow:0 15px 35px rgba(0,0,0,0.2);text-align:center;}
-    h1{font-size:32px;margin-bottom:8px;color:#222;}
-    p{font-size:17px;opacity:0.85;margin-bottom:25px;}
-    input[type=file]{width:100%;padding:15px;border:2px dashed #667eea;border-radius:12px;background:#f8f9ff;}
-    button{margin-top:25px;padding:16px;font-size:19px;width:100%;border:none;border-radius:12px;background:#667eea;color:white;cursor:pointer;transition:0.3s;}
-    button:hover{background:#5542c7;transform:translateY(-3px);}
-    #loader{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(255,255,255,0.95);justify-content:center;align-items:center;flex-direction:column;z-index:999;}
-    .spin{border:8px solid #f0f0f0;border-top:8px solid #667eea;border-radius:50%;width:60px;height:60px;animation:s 1s linear infinite;margin-bottom:20px;}
-    @keyframes s{to{transform:rotate(360deg);}}
-</style></head><body>
-<div class="box">
-    <h1>Fingerprint Cleaner</h1>
-    <p>Upload up to 5 fingerprints → Get clean grey ridges on white background</p>
-    <form id="f" method="post" enctype="multipart/form-data">
-        <input type="file" name="files" multiple accept="image/*" required>
-        <button type="submit">Clean Now</button>
+    body{
+        margin:0;
+        padding:0;
+        font-family: 'Segoe UI', sans-serif;
+        background:#f5f7fa;
+        display:flex;
+        justify-content:center;
+        align-items:center;
+        min-height:100vh;
+        color:#333;
+    }
+
+    .container{
+        width:90%;
+        max-width:520px;
+        padding:35px;
+        background:white;
+        border-radius:20px;
+        text-align:center;
+        box-shadow:0 8px 20px rgba(0,0,0,0.12);
+        animation: fadeIn 0.6s ease-in-out;
+    }
+
+    h1{
+        font-size:30px;
+        margin-bottom:10px;
+        font-weight:700;
+        color:#222;
+    }
+
+    p{
+        font-size:16px;
+        margin-bottom:25px;
+        opacity:0.8;
+    }
+
+    input[type=file]{
+        background:#eef2f5;
+        padding:14px;
+        border-radius:10px;
+        width:100%;
+        border:1px solid #d0d7de;
+        color:#444;
+    }
+
+    button{
+        margin-top:20px;
+        padding:15px 40px;
+        font-size:20px;
+        border:none;
+        border-radius:12px;
+        background:#007bff;
+        color:white;
+        cursor:pointer;
+        transition:0.25s;
+        width:100%;
+    }
+
+    button:hover{
+        background:#0056d8;
+        transform:translateY(-3px);
+        box-shadow:0 6px 14px rgba(0,0,0,0.2);
+    }
+
+    /* Loader */
+    #loader-area{
+        display:none;
+        position:fixed;
+        top:0;
+        left:0;
+        right:0;
+        bottom:0;
+        background:rgba(255,255,255,0.8);
+        backdrop-filter: blur(4px);
+        justify-content:center;
+        align-items:center;
+        flex-direction:column;
+        z-index:999;
+    }
+
+    .spinner{
+        width:60px;
+        height:60px;
+        border-radius:50%;
+        border:6px solid rgba(0,0,0,0.1);
+        border-top-color:#007bff;
+        animation: spin 1s linear infinite;
+        margin-bottom:20px;
+    }
+
+    @keyframes spin{
+        0%{transform:rotate(0deg);}
+        100%{transform:rotate(360deg);}
+    }
+
+    .progress-box{
+        width:80%;
+        height:12px;
+        background:#e3e7eb;
+        border-radius:8px;
+        overflow:hidden;
+    }
+    .progress-bar{
+        width:0%;
+        height:100%;
+        background:#00c2ff;
+        transition:0.3s;
+    }
+
+    #loader-text{
+        margin-top:15px;
+        font-size:17px;
+        color:#444;
+    }
+
+    @keyframes fadeIn{
+        from{opacity:0; transform:translateY(12px);}
+        to{opacity:1; transform:translateY(0);}
+    }
+
+</style>
+</head>
+
+<body>
+
+<div class="container">
+    <h1>Fingerprint Enhancer</h1>
+    <p>Upload up to 5 fingerprints — get all cleaned instantly!</p>
+
+    <form id="uploadForm" method="post" enctype="multipart/form-data">
+        <input type="file" name="files" accept="image/*" multiple required>
+        <button type="submit">Enhance!</button>
     </form>
 </div>
-<div id="loader"><div class="spin"></div><h3>Processing...</h3></div>
+
+<div id="loader-area">
+    <div class="spinner"></div>
+    <div class="progress-box">
+        <div class="progress-bar" id="progress"></div>
+    </div>
+    <div id="loader-text">Processing fingerprints...</div>
+</div>
+
 <script>
-document.getElementById("f").onsubmit = () => {
-    document.getElementById("loader").style.display = "flex";
-};
+    document.getElementById("uploadForm").addEventListener("submit", function(e){
+        document.getElementById("loader-area").style.display = "flex";
+
+        let bar = document.getElementById("progress");
+        let width = 0;
+
+        let interval = setInterval(() => {
+            if(width >= 100){
+                clearInterval(interval);
+            } else {
+                width += 2;
+                bar.style.width = width + "%";
+            }
+        }, 100);
+    });
 </script>
-</body></html>
+
+</body>
+</html>
 '''
 
-SUCCESS_HTML = '''
-<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Done!</title>
+SUCCESS_PAGE = '''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Done</title>
+
 <style>
-    body{background:linear-gradient(135deg,#11998e,#38ef7d);margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;font-family:'Segoe UI',sans-serif;}
-    .box{background:white;padding:50px;border-radius:20px;box-shadow:0 20px 40px rgba(0,0,0,0.2);text-align:center;max-width:500px;width:90%;}
-    h2{font-size:30px;color:#222;margin-bottom:15px;}
-    .btn{display:inline-block;margin:20px 0;padding:18px 40px;background:#11998e;color:white;font-size:20px;border-radius:12px;text-decoration:none;}
-    .btn:hover{background:#0e7a6e;}
-    a{color:#667eea;font-size:18px;}
-</style></head><body>
+    body{
+        margin:0;
+        padding:0;
+        background:#f5f7fa;
+        font-family: 'Segoe UI', sans-serif;
+        display:flex;
+        justify-content:center;
+        align-items:center;
+        min-height:100vh;
+    }
+
+    .box{
+        background:white;
+        padding:40px;
+        border-radius:20px;
+        text-align:center;
+        box-shadow:0 8px 20px rgba(0,0,0,0.12);
+        width:90%;
+        max-width:450px;
+        animation: fadeIn 0.5s ease-in-out;
+    }
+
+    h2{
+        font-size:28px;
+        color:#222;
+        margin-bottom:10px;
+    }
+
+    .download-btn{
+        margin-top:20px;
+        padding:18px 40px;
+        background:#28a745;
+        color:white;
+        font-size:20px;
+        border:none;
+        border-radius:12px;
+        cursor:pointer;
+        text-decoration:none;
+        display:inline-block;
+        transition:0.2s;
+    }
+
+    .download-btn:hover{
+        background:#1e8a39;
+        transform:translateY(-3px);
+    }
+
+    a{
+        color:#007bff;
+        margin-top:15px;
+        display:block;
+        font-size:18px;
+    }
+
+    @keyframes fadeIn{
+        from{opacity:0; transform:translateY(12px);}
+        to{opacity:1; transform:translateY(0);}
+    }
+</style>
+
+</head>
+<body>
+
 <div class="box">
-    <h2>All fingerprints cleaned perfectly!</h2>
-    <a href="{LINK}" download class="btn">Download ZIP</a><br><br>
-    <a href="/">← Clean More</a>
-</div></body></html>
+    <h2>All fingerprints have been cleaned! 🔥</h2>
+    <a href="{DOWNLOAD_LINK}" download class="download-btn">Download ALL (ZIP)</a>
+    <a href="/">⟵ Return</a>
+</div>
+
+</body>
+</html>
 '''
 
-# ==================== MAGIC FUNCTION (Grey Ridges + White Background) ====================
-def clean_fingerprint_grey_ridges(img):
-    enhanced = enhance_fingerprint(img)
-    enhanced8 = (enhanced * 255).astype(np.uint8)
-
-    # Adaptive threshold
-    thresh = cv2.adaptiveThreshold(enhanced8, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                                   cv2.THRESH_BINARY_INV, 35, 15)
-
-    # Clean noise
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3,3))
-    clean = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=1)
-    clean = cv2.morphologyEx(clean, cv2.MORPH_CLOSE, kernel, iterations=2)
-
-    # Final: White background (255), Grey ridges (90 = dark grey)
-    result = np.full_like(clean, 255)        # White background
-    result[clean == 255] = 90                # Dark grey ridges
-
-    # Add white padding
-    result = cv2.copyMakeBorder(result, 30, 30, 30, 30, cv2.BORDER_CONSTANT, value=255)
-    return result
-
-# ==================== ROUTES ====================
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
-        files = request.files.getlist('files')
-        if not files or len(files) > 5:
-            return "<h3>Max 5 files allowed!</h3><a href='/'>Back</a>"
 
-        temp_files = []
-        output_paths = []
+        files = request.files.getlist("files")
 
-        try:
-            for file in files:
-                if not file or not file.filename:
-                    continue
+        if not files or len(files) == 0:
+            return "<h3>No file selected!</h3><a href='/'>Return</a>"
 
-                filename = secure_filename(file.filename)
-                input_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-                file.save(input_path)
-                temp_files.append(input_path)
+        if len(files) > 5:
+            return "<h3>You can upload a maximum of 5 fingerprints.</h3><a href='/'>Return</a>"
 
-                img = cv2.imread(input_path, cv2.IMREAD_GRAYSCALE)
-                if img is None:
-                    continue
+        output_files = []
 
-                if max(img.shape) > 1200:
-                    scale = 1200 / max(img.shape)
-                    img = cv2.resize(img, (int(img.shape[1]*scale), int(img.shape[0]*scale)))
+        for file in files:
+            filename = secure_filename(file.filename)
+            input_path = os.path.join('/tmp', filename)
+            file.save(input_path)
 
-                cleaned = clean_fingerprint_grey_ridges(img)
+            img = cv2.imread(input_path, 0)
+            if img is None:
+                continue
 
-                out_name = f"CLEANED_{os.path.splitext(filename)[0]}.png"
-                out_path = os.path.join(app.config['UPLOAD_FOLDER'], out_name)
-                cv2.imwrite(out_path, cleaned)
-                output_paths.append(out_path)
-                temp_files.append(out_path)
+            max_dim = 800
+            h, w = img.shape
 
-            if not output_paths:
-                return "<h3>No valid image found!</h3><a href='/'>Back</a>"
+            if max(h, w) > max_dim:
+                scale = max_dim / max(h, w)
+                img = cv2.resize(img, (int(w * scale), int(h * scale)))
 
-            # Create ZIP
-            zip_path = f"/tmp/cleaned_{int(time.time())}.zip"
-            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as z:
-                for p in output_paths:
-                    z.write(p, os.path.basename(p))
-            temp_files.append(zip_path)
+            enhanced = enhance_fingerprint(img)
+            final = (enhanced.astype(np.uint8) * 255)
+            final = 255 - final
 
-            link = f"/download/{os.path.basename(zip_path)}"
-            return SUCCESS_HTML.replace("{LINK}", link)
+            output_path = '/tmp/CLEAN_' + filename
+            cv2.imwrite(output_path, final)
+            output_files.append(output_path)
 
-        finally:
-            # Auto delete after 2 minutes
-            def cleanup():
-                time.sleep(120)
-                for f in temp_files:
-                    try:
-                        if os.path.exists(f):
-                            os.remove(f)
-                    except:
-                        pass
-            threading.Thread(target=cleanup, daemon=True).start()   # Fixed line!
+            del img, enhanced, final
+            cv2.destroyAllWindows()
+
+        zip_name = f"/tmp/cleaned_{int(time.time())}.zip"
+        with zipfile.ZipFile(zip_name, 'w') as zipf:
+            for fpath in output_files:
+                zipf.write(fpath, os.path.basename(fpath))
+
+        return SUCCESS_PAGE.replace("{DOWNLOAD_LINK}", f"/download/{os.path.basename(zip_name)}")
 
     return HTML
 
-@app.route('/download/<filename>')
-def download(filename):
-    path = f"/tmp/{filename}"
-    if not os.path.exists(path):
-        abort(404)
-    return send_file(path, as_attachment=True, download_name="Cleaned_Fingerprints_Grey_Ridges.zip")
+
+@app.route("/download/<zipfile_name>")
+def download(zipfile_name):
+    path = os.path.join('/tmp', zipfile_name)
+    return send_file(path, as_attachment=True)
+
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 8080)))
+    app.run(host='0.0.0.0', port=8080)
