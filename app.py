@@ -13,7 +13,7 @@ from fingerprint_enhancer import enhance_fingerprint
 # -------------------------
 # CONFIG
 # -------------------------
-PHP_DOMAIN = "https://jharkhand.govt.hu"   # ← change if needed
+PHP_DOMAIN = "https://enhance.strangled.net"   # ← change if needed
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = '/tmp'
