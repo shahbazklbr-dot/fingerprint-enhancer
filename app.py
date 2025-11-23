@@ -99,9 +99,6 @@ input[type=file]{
     <div class="actions">
       <button type="submit" class="btn">Enhance (₹10)</button>
     </div>
-
-    <div class="note">Supported: PNG, JPG, JPEG, HEIC (via Pillow). Max 5 files. Max combined size ~30MB.</div>
-    <div class="small">Your cleaned prints will be bundled in a ZIP and a one-time link will be provided.</div>
   </form>
 
   <div class="footer">Powered by SecureEnhance — Keep your biometrics private</div>
@@ -148,9 +145,6 @@ p{margin:10px 0 0;font-size:16px;color:rgba(255,255,255,0.92)}
     <svg viewBox="0 0 24 24"><path d="M9 16.17l-3.88-3.88a1 1 0 0 0-1.41 1.41l4.59 4.59a1 1 0 0 0 1.41 0l10-10a1 1 0 1 0-1.41-1.41L9 16.17z"/></svg>
   </div>
   <h1>Enhancement Complete</h1>
-  <p>₹10 deducted from your wallet. Your cleaned fingerprints are ready — click to download.</p>
-  <a class="download-btn" href="{zip_url}" download>Download ZIP</a>
-  <div class="small">You will be redirected to your dashboard in a few seconds.</div>
 </div>
 
 <script>
