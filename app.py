@@ -45,6 +45,7 @@ button{margin-top:20px;padding:15px;background:#007bff;color:white;border:none;w
 </div>
 </body></html>"""
 
+# FIXED SUCCESS PAGE (NO .format, NO KeyError)
 SUCCESS_PAGE = """<!DOCTYPE html><html><head><meta charset='UTF-8'>
 <title>Downloading...</title>
 <meta http-equiv="refresh" content="5;url={dashboard}">
@@ -67,19 +68,15 @@ document.body.appendChild(a);a.click();a.remove();
 </script>
 </body></html>"""
 
+
 def safe_read(path):
-    """Convert any image safely → grayscale numpy."""
     try:
         img = Image.open(path)
-
         if img.mode not in ["RGB", "L", "GRAY"]:
             img = img.convert("RGB")
-
         img = np.array(img)
-
         if len(img.shape) == 3:
             img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-
         return img
     except:
         return cv2.imread(path, 0)
@@ -97,7 +94,7 @@ def index():
         files = request.files.getlist("files")
 
         if not (1 <= len(files) <= 5):
-            return render_template_string(HTML, error="Upload 1-5 files only!", token=token, user_id=user_id)
+            return render_template_string(HTML, error="Upload 1–5 files only!", token=token, user_id=user_id)
 
         processed = []
 
@@ -110,39 +107,34 @@ def index():
             if img is None:
                 continue
 
-            # EXACTLY SAME RESIZE AS YOUR WORKING CODE
             max_dim = 800
             h, w = img.shape
             if max(h, w) > max_dim:
                 scale = max_dim / max(h, w)
                 img = cv2.resize(img, (int(w * scale), int(h * scale)))
 
-            # EXACT SAME ENHANCER BEHAVIOR LIKE WORKING CODE
             try:
                 enhanced = enhance_fingerprint(img)
-            except Exception as e:
-                print("ENHANCE ERROR:", e)
-                return render_template_string(HTML, error="Bad fingerprint! Try a clearer one.", token=token, user_id=user_id)
+            except:
+                return render_template_string(HTML, error="Bad fingerprint! Try again.", token=token, user_id=user_id)
 
             final = (enhanced.astype(np.uint8) * 255)
-            final = 255 - final  # SAME CLEAN LOOK
+            final = 255 - final
 
             output_path = f"/tmp/CLEAN_{filename}"
             cv2.imwrite(output_path, final)
-            processed.append((filename, output_path))
+            processed.append(output_path)
 
         if not processed:
             return render_template_string(HTML, error="No valid fingerprints found!", token=token, user_id=user_id)
 
-        # MAKE ZIP
         zip_name = f"clean_{user_id}_{int(time.time())}.zip"
         zip_path = f"/tmp/{zip_name}"
 
         with zipfile.ZipFile(zip_path, 'w') as z:
-            for original, cleaned in processed:
-                z.write(cleaned, os.path.basename(cleaned))
+            for fpath in processed:
+                z.write(fpath, os.path.basename(fpath))
 
-        # PAYMENT
         try:
             r = requests.post(DEDUCT_API, data={'token': token, 'user_id': user_id}, timeout=10)
             if not r.json().get("success"):
@@ -153,7 +145,6 @@ def index():
         ZIP_STORAGE[zip_name] = zip_path
         download_url = request.url_root + "dl/" + zip_name
 
-        # AUTO CLEANUP
         def cleanup():
             time.sleep(180)
             if os.path.exists(zip_path):
@@ -162,7 +153,8 @@ def index():
 
         threading.Thread(target=cleanup, daemon=True).start()
 
-        return SUCCESS_PAGE.format(dashboard=DASHBOARD_URL, zip_url=download_url)
+        page = SUCCESS_PAGE.replace("{dashboard}", DASHBOARD_URL).replace("{zip_url}", download_url)
+        return page
 
     return render_template_string(HTML, token=token, user_id=user_id, error=None)
 
