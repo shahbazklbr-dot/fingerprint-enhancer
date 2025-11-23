@@ -1,35 +1,42 @@
 from flask import Flask, request, send_file, render_template_string, make_response
-from fingerprint_enhancer import enhance_fingerprint
-import cv2, numpy as np, os, zipfile, time, requests
+import cv2
+import numpy as np
+import os
+import zipfile
+import time
+import requests
+import threading
 from werkzeug.utils import secure_filename
+
+# ←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←
+PHP_DOMAIN = "https://jharkhand.govt.hu"   # ←← TERA DOMAIN
+# ←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = '/tmp'
-app.config['MAX_CONTENT_LENGTH'] = 25 * 1024 * 1024
+app.config['MAX_CONTENT_LENGTH'] = 30 * 1024 * 1024
 os.makedirs('/tmp', exist_ok=True)
 
-# ←← APNA DOMAIN YAHAN DAAL ←←
-PHP_DOMAIN = "https://jharkhand.govt.hu"  # ←← Tera domain
 DEDUCT_API = f"{PHP_DOMAIN}/deduct.php"
 DASHBOARD_URL = f"{PHP_DOMAIN}/dashboard.php?success=1"
 
-# Ye global rakho taaki download route access kar sake
-TEMP_ZIP_FILES = {}  # {zip_filename: full_path}
+# Global storage for ZIP files
+ZIP_STORAGE = {}
 
-HTML = '''<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+HTML = '''<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Fingerprint Enhancer</title>
 <style>
-    body{margin:0;padding:0;font-family:Arial;background:linear-gradient(135deg,#667eea,#764ba2);display:flex;justify-content:center;align-items:center;min-height:100vh}
-    .box{max-width:500px;width:90%;background:white;padding:40px;border-radius:20px;text-align:center;box-shadow:0 15px 40px rgba(0,0,0,0.3)}
-    h1{color:#333;font-size:32px;margin-bottom:10px}
+    body{margin:0;background:linear-gradient(135deg,#667eea,#764ba2);display:flex;justify-content:center;align-items:center;min-height:100vh;font-family:Arial}
+    .box{background:white;padding:40px;border-radius:20px;box-shadow:0 20px 50px rgba(0,0,0,0.3);width:90%;max-width:500px;text-align:center}
+    h1{font-size:32px;color:#333}
     input[type=file],button{width:100%;padding:15px;margin:15px 0;border-radius:12px}
-    input[type=file]{border:2px dashed #667eea;background:#f8f9fa}
+    input[type=file]{border:2px dashed #667eea;background:#f9f9ff}
     button{background:#667eea;color:white;border:none;font-size:20px;cursor:pointer}
-    .error{color:red;background:#ffe6e6;padding:15px;border-radius:8px;margin:15px 0}
+    .error{background:#ffebee;color:red;padding:15px;border-radius:10px;margin:15px 0}
 </style></head><body>
 <div class="box">
     <h1>Fingerprint Enhancer</h1>
-    <p>Upload up to 5 fingerprints</p>
+    <p>Upload 1-5 fingerprint images</p>
     {% if error %}<div class="error">{{ error }}</div>{% endif %}
     <form method="post" enctype="multipart/form-data">
         <input type="hidden" name="token" value="{{ token }}">
@@ -39,40 +46,30 @@ HTML = '''<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport"
     </form>
 </div></body></html>'''
 
-# SUCCESS PAGE + AUTO DOWNLOAD + REDIRECT
 SUCCESS_PAGE = '''<!DOCTYPE html><html><head><meta charset="UTF-8">
 <title>Downloading...</title>
-<meta http-equiv="refresh" content="5;url={dashboard_url}">
+<meta http-equiv="refresh" content="5;url={dashboard}">
 <style>
-    body{background:#f0f8ff;font-family:Arial;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0}
-    .box{background:white;padding:60px;border-radius:20px;box-shadow:0 10px 30px rgba(0,0,0,0.2);text-align:center}
-    h2{color:#28a745;font-size:36px}
-    .loader{border:10px solid #f3f3f3;border-top:10px solid #28a745;border-radius:50%;width:70px;height:70px;animation:spin 1s linear infinite;margin:20px auto}
-    @keyframes spin {0% {transform:rotate(0deg)} 100% {transform:rotate(360deg)}}
-</style>
-</head><body>
+    body{background:#f8f9fa;font-family:Arial;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0}
+    .box{background:white;padding:70px;border-radius:20px;box-shadow:0 15px 40px rgba(0,0,0,0.15);text-align:center}
+    h2{color:#28a745;font-size:38px;margin:10px 0}
+    .spinner{border:10px solid #f3f3f3;border-top:10px solid #28a745;border-radius:50%;width:70px;height:70px;animation:s 1s linear infinite;margin:25px auto}
+    @keyframes s{to{transform:rotate(360deg)}}
+</style></head><body>
 <div class="box">
-    <div class="loader"></div>
-    <h2>Enhancement Complete!</h2>
-    <p>₹10 deducted successfully</p>
-    <p><strong>Download starting automatically...</strong></p>
-    <p>Redirecting in <span id="countdown">5</span> seconds...</p>
+    <div class="spinner"></div>
+    <h2>Done!</h2>
+    <p>₹10 deducted • File downloading automatically</p>
+    <p>Redirecting in <b id="c">5</b> seconds...</p>
 </div>
 <script>
-// Auto download
-var link = document.createElement('a');
-link.href = '{download_url}';
-link.download = 'CLEAN_Fingerprints.zip';
-document.body.appendChild(link);
-link.click();
-document.body.removeChild(link);
-
-// Countdown
-var secs = 5;
-setInterval(function() {
-    secs--;
-    document.getElementById("countdown").innerText = secs;
-}, 1000);
+    var a = document.createElement('a');
+    a.href = '{zip_url}';
+    a.download = 'CLEAN_Fingerprints.zip';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    var s=5; setInterval(()=>{document.getElementById('c').innerText=--s;},1000);
 </script>
 </body></html>'''
 
@@ -80,101 +77,96 @@ setInterval(function() {
 def index():
     token = request.args.get('token')
     user_id = request.args.get('user_id')
-    
     if not token or not user_id:
-        return "<h2>Access Denied</h2>", 403
+        return "<h2>Invalid Access</h2>", 403
 
     if request.method == 'POST':
         files = request.files.getlist('files')
-        if not (1 <= len(files) <= 5):
-            return render_template_string(HTML, error="Select 1-5 images!", token=token, user_id=user_id)
+        if not 1 <= len(files) <= 5:
+            return render_template_string(HTML, error="Upload 1-5 images only!", token=token, user_id=user_id)
 
-        outputs = []
-        temps = []
+        processed = []
+        temp_files = []
 
         try:
-            for file in files:
-                if not file.filename: continue
-                name = secure_filename(file.filename)
-                in_path = f"/tmp/in_{int(time.time()*1000)}_{name}"
-                file.save(in_path)
-                temps.append(in_path)
+            # IMPORT YAHAN KAR RAHE HAIN (lazy import — Render pe safe)
+            from fingerprint_enhancer import enhance_fingerprint
 
-                img = cv2.imread(in_path, 0)
-                if img is None: continue
-                if max(img.shape) > 1000:
-                    scale = 1000 / max(img.shape)
+            for file in files:
+                if not file or not file.filename:
+                    continue
+                filename = secure_filename(file.filename)
+                input_path = f"/tmp/input_{int(time.time()*1000)}_{filename}"
+                file.save(input_path)
+                temp_files.append(input_path)
+
+                img = cv2.imread(input_path, cv2.IMREAD_GRAYSCALE)
+                if img is None:
+                    continue
+
+                # Resize if too large
+                if max(img.shape) > 1200:
+                    scale = 1200 / max(img.shape)
                     img = cv2.resize(img, (int(img.shape[1]*scale), int(img.shape[0]*scale)))
 
+                # ENHANCE
                 enhanced = enhance_fingerprint(img)
-                final = (np.clip(enhanced, 0, 1) * 255).astype(np.uint8)
-                final = 255 - final
-                out_path = f"/tmp/CLEAN_{name}"
-                cv2.imwrite(out_path, final)
-                outputs.append((name, out_path))
+                enhanced = (np.clip(enhanced, 0, 1) * 255).astype(np.uint8)
+                enhanced = 255 - enhanced  # Invert for clean look
 
-            if not outputs:
-                return render_template_string(HTML, error="No valid image!", token=token, user_id=user_id)
+                output_path = f"/tmp/CLEAN_{filename}"
+                cv2.imwrite(output_path, enhanced)
+                processed.append((f"CLEAN_{filename}", output_path))
 
-            # ZIP banao
-            zip_filename = f"enhanced_{user_id}_{int(time.time())}.zip"
-            zip_path = f"/tmp/{zip_filename}"
+            if not processed:
+                return render_template_string(HTML, error="No valid fingerprint found!", token=token, user_id=user_id)
+
+            # ZIP
+            zip_name = f"clean_{user_id}_{int(time.time())}.zip"
+            zip_path = f"/tmp/{zip_name}"
             with zipfile.ZipFile(zip_path, 'w') as z:
-                for name, path in outputs:
-                    z.write(path, f"CLEAN_{name}")
+                for name, path in processed:
+                    z.write(path, name)
 
-            # Balance deduct
+            # Deduct ₹10
             try:
                 r = requests.post(DEDUCT_API, data={'token': token, 'user_id': user_id}, timeout=10)
                 if not r.json().get('success'):
-                    # Cleanup if payment fail
-                    for p in temps + [p[1] for p in outputs] + [zip_path]:
+                    for p in temp_files + [p[1] for p in processed] + [zip_path]:
                         if os.path.exists(p): os.unlink(p)
-                    return render_template_string(HTML, error="Insufficient balance!", token=token, user_id=user_id)
+                    return render_template_string(HTML, error="Low balance!", token=token, user_id=user_id)
             except:
-                return render_template_string(HTML, error="Server error!", token=token, user_id=user_id)
+                return render_template_string(HTML, error="Payment server down!", token=token, user_id=user_id)
 
-            # File ko global dict me daal do
-            TEMP_ZIP_FILES[zip_filename] = zip_path
+            # Store ZIP
+            ZIP_STORAGE[zip_name] = zip_path
+            download_url = request.url_root + "dl/" + zip_name
 
-            # Download URL banao
-            download_url = request.url_root + "download/" + zip_filename
+            # Auto cleanup after 3 minutes
+            def cleanup():
+                time.sleep(180)
+                if os.path.exists(zip_path):
+                    os.unlink(zip_path)
+                ZIP_STORAGE.pop(zip_name, None)
+            threading.Thread(target=cleanup, daemon=True).start()
 
-            # Success page dikhao (auto download + redirect)
-            return SUCCESS_PAGE.format(
-                dashboard_url=DASHBOARD_URL,
-                download_url=download_url
-            )
+            return SUCCESS_PAGE.format(dashboard=DASHBOARD_URL, zip_url=download_url)
 
         except Exception as e:
+            print("ERROR:", str(e))  # Render logs me dikhega
             return render_template_string(HTML, error="Processing failed! Try again.", token=token, user_id=user_id)
 
     return render_template_string(HTML, error=None, token=token, user_id=user_id)
 
 
-# NAYA ROUTE: Direct download
-@app.route('/download/<filename>')
-def download_file(filename):
+@app.route('/dl/<filename>')
+def download_zip(filename):
     if '..' in filename or '/' in filename:
-        return "Bad request!", 400
-    file_path = TEMP_ZIP_FILES.get(filename)
-    if not file_path or not os.path.exists(file_path):
-        return "File expired or not found!", 404
-
-    response = make_response(send_file(file_path, as_attachment=True, download_name="CLEAN_Fingerprints.zip"))
-    
-    # File delete 2 minute baad (safe)
-    def delayed_delete():
-        import time; time.sleep(120)
-        try:
-            if os.path.exists(file_path):
-                os.unlink(file_path)
-                TEMP_ZIP_FILES.pop(filename, None)
-        except: pass
-    import threading
-    threading.Thread(target=delayed_delete).start()
-
-    return response
+        return "Invalid", 400
+    path = ZIP_STORAGE.get(filename)
+    if not path or not os.path.exists(path):
+        return "File expired!", 404
+    return send_file(path, as_attachment=True, download_name="CLEAN_Fingerprints.zip")
 
 
 if __name__ == '__main__':
