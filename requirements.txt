@@ -1,7 +1,6 @@
-fingerprint_enhancer
-opencv-python-headless
 flask
 gunicorn
-numpy
-pillow
+opencv-python-headless==4.9.0.80
+numpy==1.24.3
+fingerprint-enhancer==1.0.6
 requests
