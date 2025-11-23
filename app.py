@@ -22,51 +22,127 @@ DASHBOARD_URL = f"{PHP_DOMAIN}/dashboard.php?success=1"
 
 ZIP_STORAGE = {}
 
-HTML = """<!DOCTYPE html><html><head><meta charset='UTF-8'>
+HTML = """<!DOCTYPE html>
+<html>
+<head>
+<meta charset='UTF-8'>
 <title>Fingerprint Enhancer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
 <style>
-body{margin:0;padding:0;font-family:Arial;background:#f0f2f5;display:flex;justify-content:center;align-items:center;height:100vh}
-.box{background:white;padding:40px;border-radius:20px;box-shadow:0 10px 25px rgba(0,0,0,0.1);width:90%;max-width:450px;text-align:center}
-input[type=file]{padding:14px;width:100%;border:1px solid #ddd;border-radius:10px;background:#fafafa}
-button{margin-top:20px;padding:15px;background:#007bff;color:white;border:none;width:100%;font-size:18px;border-radius:10px;cursor:pointer}
-.error{background:#ffe6e6;color:#d10000;padding:12px;border-radius:10px;margin-bottom:10px}
-</style></head>
+body{
+    margin:0;
+    padding:0;
+    font-family: 'Segoe UI', sans-serif;
+    background: linear-gradient(135deg,#667eea,#764ba2);
+    height:100vh;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+}
+
+/* Glass Card */
+.box{
+    width:90%;
+    max-width:460px;
+    padding:40px;
+    background:rgba(255,255,255,0.15);
+    backdrop-filter:blur(12px);
+    border-radius:22px;
+    box-shadow:0 10px 35px rgba(0,0,0,0.25);
+    text-align:center;
+    animation:fadeIn 0.7s ease;
+}
+
+@keyframes fadeIn{
+    from{opacity:0;transform:translateY(20px);}
+    to{opacity:1;transform:translateY(0);}
+}
+
+h2{
+    font-size:32px;
+    font-weight:700;
+    color:white;
+    margin-bottom:8px;
+}
+
+p{
+    color:#f1f1f1;
+    margin-bottom:25px;
+    font-size:16px;
+}
+
+/* File Upload */
+input[type=file]{
+    width:100%;
+    padding:13px;
+    border-radius:12px;
+    background:white;
+    border:2px dashed #e3e6ff;
+    font-size:16px;
+    cursor:pointer;
+}
+
+/* Button */
+button{
+    width:100%;
+    padding:16px;
+    margin-top:20px;
+    background:#00d084;
+    color:white;
+    font-size:20px;
+    border:none;
+    border-radius:12px;
+    cursor:pointer;
+    transition:0.25s;
+    font-weight:600;
+}
+
+button:hover{
+    background:#00b070;
+    transform:translateY(-3px);
+    box-shadow:0 6px 18px rgba(0,0,0,0.2);
+}
+
+/* Error Box */
+.error{
+    background:#ffebee;
+    color:#d80000;
+    padding:12px;
+    border-radius:12px;
+    margin-bottom:15px;
+    animation:shake 0.3s;
+}
+
+@keyframes shake{
+    25%{transform:translateX(-4px);}
+    50%{transform:translateX(4px);}
+    75%{transform:translateX(-4px);}
+}
+</style>
+</head>
+
 <body>
 <div class="box">
     <h2>Fingerprint Enhancer</h2>
-    <p>Upload 1–5 fingerprints</p>
-    {% if error %}<div class="error">{{error}}</div>{% endif %}
+    <p>Upload 1–5 fingerprint images</p>
+
+    {% if error %}
+        <div class="error">{{error}}</div>
+    {% endif %}
+
     <form method="POST" enctype="multipart/form-data">
         <input type="hidden" name="token" value="{{ token }}">
         <input type="hidden" name="user_id" value="{{ user_id }}">
+
         <input type="file" name="files" accept="image/*" multiple required>
+
         <button type="submit">Enhance (₹10)</button>
     </form>
 </div>
-</body></html>"""
+</body>
+</html>"""
 
-# FIXED SUCCESS PAGE (NO .format, NO KeyError)
-SUCCESS_PAGE = """<!DOCTYPE html><html><head><meta charset='UTF-8'>
-<title>Downloading...</title>
-<meta http-equiv="refresh" content="5;url={dashboard}">
-<style>
-body{background:#f0f2f5;font-family:Arial;display:flex;justify-content:center;align-items:center;height:100vh}
-.box{background:white;padding:50px;border-radius:20px;text-align:center;box-shadow:0 10px 25px rgba(0,0,0,0.1)}
-.spinner{width:60px;height:60px;border:7px solid #eee;border-top-color:#28a745;border-radius:50%;animation:spin 1s linear infinite;margin:20px auto}
-@keyframes spin{100%{transform:rotate(360deg)}}
-</style></head><body>
-<div class="box">
-    <div class="spinner"></div>
-    <h2>Done!</h2>
-    <p>₹10 deducted • Download starting...</p>
-</div>
-<script>
-var a=document.createElement('a');
-a.href='{zip_url}';
-a.download='CLEAN_Fingerprints.zip';
-document.body.appendChild(a);a.click();a.remove();
-</script>
-</body></html>"""
 
 
 def safe_read(path):
