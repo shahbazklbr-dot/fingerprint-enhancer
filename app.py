@@ -9,22 +9,21 @@ import threading
 from werkzeug.utils import secure_filename
 from PIL import Image
 from fingerprint_enhancer import enhance_fingerprint
-from itsdangerous import TimedJSONWebSignatureSerializer as Serializer
 
 # -------------------------
 # CONFIG
 # -------------------------
-PHP_DOMAIN = "https://enhance.strangled.net" # ← change if needed
+PHP_DOMAIN = "https://enhance.strangled.net"   # ← change if needed
+
 app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY', base64.b64encode(os.urandom(24)).decode())  # Secure random key
 app.config['UPLOAD_FOLDER'] = '/tmp'
 app.config['MAX_CONTENT_LENGTH'] = 30 * 1024 * 1024
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+
 DEDUCT_API = f"{PHP_DOMAIN}/deduct.php"
 DASHBOARD_URL = f"{PHP_DOMAIN}/dashboard.php?success=1"
 
-# Serializer for secure download tokens (expires in 180 seconds)
-serializer = Serializer(app.secret_key, expires_in=180)
+ZIP_STORAGE = {}  # in-memory map: zip_name -> path
 
 # -------------------------
 # PREMIUM UPLOAD PAGE (UI)
@@ -85,23 +84,28 @@ input[type=file]{
       <div class="h-sub">Upload up to 5 fingerprint images — cleaned and ready to download</div>
     </div>
   </div>
+
   {% if error %}
     <div class="error">{{ error }}</div>
   {% endif %}
+
   <form method="POST" enctype="multipart/form-data" id="uploadForm">
     <input type="hidden" name="token" value="{{ token }}">
     <input type="hidden" name="user_id" value="{{ user_id }}">
     <div class="input-row">
       <input type="file" name="files" accept="image/*" multiple required>
     </div>
+
     <div class="actions">
       <button type="submit" class="btn">Enhance</button>
     </div>
   </form>
-  <div class="footer">Poweredddddd by SecureEnhance — Keep your biometrics private</div>
+
+  <div class="footer">Powered by SecureEnhance — Keep your biometrics private</div>
 </div>
+
 <script>
-document.getElementById('uploadForm')?.addEventListener('submit', function(){
+document.getElementById('uploadForm')?.addEventListener('submit', function(){ 
   // simple visual feedback (no spinner to avoid extra assets)
   const btn = document.querySelector('.btn');
   if(btn){ btn.disabled = true; btn.innerText = 'Processing...'; }
@@ -144,6 +148,7 @@ p{margin:10px 0 0;font-size:16px;color:rgba(255,255,255,0.92)}
   <p>Your cleaned fingerprints are ready.</p>
   <div class="small">You will be redirected to your dashboard in a few seconds.</div>
 </div>
+
 <script>
 // Trigger automatic download
 (function(){
@@ -201,24 +206,12 @@ def start_cleanup_later(zip_path, delay=180):
                 os.unlink(zip_path)
         except Exception as e:
             print("cleanup error:", e)
+        # remove from ZIP_STORAGE safely
+        for k, v in list(ZIP_STORAGE.items()):
+            if v == zip_path:
+                ZIP_STORAGE.pop(k, None)
     t = threading.Thread(target=_cleanup, daemon=True)
     t.start()
-
-def generate_download_token(zip_name, user_id):
-    return serializer.dumps({'zip_name': zip_name, 'user_id': user_id}).decode()
-
-def validate_token(token):
-    try:
-        data = serializer.loads(token)
-        zip_name = data['zip_name']
-        # user_id = data['user_id']  # Optional: validate user_id if needed
-        path = os.path.join(app.config['UPLOAD_FOLDER'], zip_name)
-        if os.path.exists(path):
-            return path
-        return None
-    except Exception as e:
-        print("Token validation error:", e)
-        return None
 
 # -------------------------
 # ROUTES
@@ -227,16 +220,20 @@ def validate_token(token):
 def index():
     token = request.args.get('token')
     user_id = request.args.get('user_id')
+
     if not token or not user_id:
         return "<h2>Invalid Access</h2>", 403
+
     if request.method == "POST":
         files = request.files.getlist("files")
         if not files or len(files) == 0:
             return render_template_string(HTML, error="No files selected!", token=token, user_id=user_id)
         if len(files) > 5:
             return render_template_string(HTML, error="Upload maximum 5 files!", token=token, user_id=user_id)
+
         processed_paths = []
         temp_paths = []
+
         for file in files:
             if not file or not getattr(file, "filename", None):
                 continue
@@ -249,10 +246,12 @@ def index():
                 print("file.save error:", e)
                 continue
             temp_paths.append(input_path)
+
             img = safe_read(input_path)
             if img is None:
                 print("Could not read image:", input_path)
                 continue
+
             # Resize maximum dimension to 800 px (keeps aspect)
             try:
                 h, w = img.shape
@@ -263,6 +262,7 @@ def index():
             if max(h, w) > max_dim:
                 scale = max_dim / max(h, w)
                 img = cv2.resize(img, (int(w * scale), int(h * scale)))
+
             # Run enhancer in try/except (so whole app doesn't crash)
             try:
                 enhanced = enhance_fingerprint(img)
@@ -274,15 +274,18 @@ def index():
                         if os.path.exists(p): os.unlink(p)
                     except: pass
                 return render_template_string(HTML, error="Enhancement failed on one of the images. Try a clearer image.", token=token, user_id=user_id)
+
             if enhanced is None or getattr(enhanced, "size", 1) == 0:
                 print("enhancer returned invalid output for", input_path)
                 continue
+
             try:
                 final = (np.clip(enhanced, 0, 1) * 255).astype(np.uint8)
                 final = 255 - final
             except Exception as e:
                 print("postprocess error:", e)
                 continue
+
             output_name = f"CLEAN_{filename}"
             output_path = os.path.join(app.config['UPLOAD_FOLDER'], output_name)
             try:
@@ -290,7 +293,9 @@ def index():
             except Exception as e:
                 print("cv2.imwrite error:", e)
                 continue
+
             processed_paths.append(output_path)
+
         # Nothing processed?
         if not processed_paths:
             # remove any temp files
@@ -298,6 +303,7 @@ def index():
                 try: os.unlink(p)
                 except: pass
             return render_template_string(HTML, error="No valid fingerprints were processed.", token=token, user_id=user_id)
+
         # Create ZIP
         zip_name = f"clean_{user_id}_{int(time.time())}.zip"
         zip_path = os.path.join(app.config['UPLOAD_FOLDER'], zip_name)
@@ -306,6 +312,7 @@ def index():
         except Exception as e:
             print("zip creation error:", e)
             return render_template_string(HTML, error="Failed to create ZIP.", token=token, user_id=user_id)
+
         # Attempt payment (deduct ₹10)
         try:
             r = requests.post(DEDUCT_API, data={'token': token, 'user_id': user_id}, timeout=10)
@@ -331,23 +338,30 @@ def index():
                     if os.path.exists(p): os.unlink(p)
             except: pass
             return render_template_string(HTML, error="Payment service unreachable!", token=token, user_id=user_id)
-        # Schedule cleanup
+
+        # Store zip and schedule cleanup
+        ZIP_STORAGE[zip_name] = zip_path
         start_cleanup_later(zip_path, delay=180)
-        # Generate secure token for download
-        download_token = generate_download_token(zip_name, user_id)
-        download_url = request.url_root.rstrip('/') + "/dl/" + download_token
+        download_url = request.url_root.rstrip('/') + "/dl/" + zip_name
+
         # Use safe replace to avoid .format() curly-brace issues
         page = SUCCESS_PAGE.replace("{dashboard}", DASHBOARD_URL).replace("{zip_url}", download_url)
         return page
+
     # GET
     return render_template_string(HTML, token=token, user_id=user_id, error=None)
 
-@app.route("/dl/<token>")
-def download(token):
-    path = validate_token(token)
-    if not path:
+
+@app.route("/dl/<zipfile>")
+def download(zipfile):
+    # basic validation
+    if ".." in zipfile or "/" in zipfile:
+        return "Invalid", 400
+    path = ZIP_STORAGE.get(zipfile)
+    if not path or not os.path.exists(path):
         return "Expired or invalid!", 404
     return send_file(path, as_attachment=True, download_name="CLEAN_Fingerprints.zip")
+
 
 # -------------------------
 # START APP
