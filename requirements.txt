@@ -5,3 +5,4 @@ numpy
 pillow
 requests
 fingerprint_enhancer
+itsdangerous
