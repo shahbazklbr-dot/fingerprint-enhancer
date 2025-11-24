@@ -98,7 +98,7 @@ input[type=file]{
       <button type="submit" class="btn">Enhance</button>
     </div>
   </form>
-  <div class="footer">Powereddddd by SecureEnhance — Keep your biometrics private</div>
+  <div class="footer">Poweredddddd by SecureEnhance — Keep your biometrics private</div>
 </div>
 <script>
 document.getElementById('uploadForm')?.addEventListener('submit', function(){
